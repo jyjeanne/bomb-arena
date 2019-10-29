@@ -8,7 +8,7 @@ startGame();
 
 function startGame() {
 	
-    socket = io("http://localhost:8080"); // TODO check port already used
+    socket = io("http://localhost:8007"); // TODO check port already used
 
     require("./game/mods/phaser_enhancements");
 
