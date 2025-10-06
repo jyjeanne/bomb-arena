@@ -1,100 +1,149 @@
-var StageSelect = function() {};
+const xOffset = 40;
+const yOffset = 50;
+const thumbnailXOffset = 255;
+const thumbnailYOffset = 150;
+const stageNameYOffset = 328;
 
-module.exports = StageSelect;
+let repeatingBombTilesprite;
 
-var xOffset = 40;
-var yOffset = 50;
-
-var thumbnailXOffset = 255;
-var thumbnailYOffset = 150;
-
-var stageNameYOffset = 328;
-
-var repeatingBombTilesprite;
-
-var stages = [
-	{name: "Limitless Brook", thumbnailKey: "thumbnails/limitless_brook_thumbnail.png", tilemapName: "levelOne", maxPlayers: 4, size: "small"},
-	{name: "Danger Desert", thumbnailKey: "thumbnails/danger_desert_thumbnail.png", tilemapName: "levelTwo", maxPlayers: 4, size: "medium"}
+const stages = [
+  {name: "Limitless Brook", thumbnailKey: "thumbnails/limitless_brook_thumbnail.png", tilemapName: "levelOne", maxPlayers: 4, size: "small"},
+  {name: "Danger Desert", thumbnailKey: "thumbnails/danger_desert_thumbnail.png", tilemapName: "levelTwo", maxPlayers: 4, size: "medium"}
 ];
 
-StageSelect.prototype = {
-	init: function(gameId, rbts) {
-		repeatingBombTilesprite = rbts;
-		this.gameId = gameId;
-	},
+class StageSelect extends Phaser.Scene {
+  constructor() {
+    super({ key: 'StageSelect' });
+  }
 
-	create: function() {
-		var selectionWindow = game.add.image(xOffset, yOffset, TEXTURES, "lobby/select_stage.png");
-		this.selectedStageIndex = 0;
-		var initialStage = stages[this.selectedStageIndex];
+  init(data) {
+    repeatingBombTilesprite = data.rbts;
+    this.gameId = data.gameId;
+  }
 
-		this.leftButton = game.add.button(150, 180, TEXTURES, this.leftSelect, this, "lobby/buttons/left_select_button_02.png", "lobby/buttons/left_select_button_01.png");
-		this.rightButton = game.add.button(400, 180, TEXTURES, this.rightSelect, this, "lobby/buttons/right_select_button_02.png", "lobby/buttons/right_select_button_01.png");
-		this.okButton = game.add.button(495, 460, TEXTURES, this.confirmStageSelection, this, "lobby/buttons/ok_button_02.png", "lobby/buttons/ok_button_01.png");
+  create() {
+    const selectionWindow = this.add.image(xOffset, yOffset, TEXTURES, "lobby/select_stage.png");
+    selectionWindow.setOrigin(0, 0);
 
-		this.leftButton.setDownSound(buttonClickSound);
-		this.rightButton.setDownSound(buttonClickSound);
-		this.okButton.setDownSound(buttonClickSound);
+    this.selectedStageIndex = 0;
+    const initialStage = stages[this.selectedStageIndex];
 
-		this.thumbnail = game.add.image(thumbnailXOffset, thumbnailYOffset, TEXTURES, initialStage.thumbnailKey);
+    // Phaser 3: Interactive images instead of buttons
+    this.leftButton = this.add.image(150, 180, TEXTURES, "lobby/buttons/left_select_button_01.png");
+    this.leftButton.setOrigin(0, 0);
+    this.leftButton.setInteractive();
 
-		// Display title
-		this.text = game.add.text(game.camera.width / 2, stageNameYOffset, initialStage.name);
-		this.configureText(this.text, "white", 28);
-		this.text.anchor.setTo(.5, .5);
+    this.leftButton.on('pointerover', () => {
+      this.leftButton.setFrame("lobby/buttons/left_select_button_02.png");
+    });
 
-		// Display number of players
-		this.numPlayersText = game.add.text(145, 390, "Max # of players:   " + initialStage.maxPlayers);
-		this.configureText(this.numPlayersText, "white", 18);
+    this.leftButton.on('pointerout', () => {
+      this.leftButton.setFrame("lobby/buttons/left_select_button_01.png");
+    });
 
-		// Display stage size
-		this.stageSizeText = game.add.text(145, 420, "Map size:   " + initialStage.size);
-		this.configureText(this.stageSizeText, "white", 18);
-	},
+    this.leftButton.on('pointerdown', () => {
+      window.buttonClickSound.play();
+      this.leftSelect();
+    });
 
-	leftSelect: function() {
-		if(this.selectedStageIndex === 0) {
-			this.selectedStageIndex = stages.length - 1;
-		} else {
-			this.selectedStageIndex--;
-		}
+    this.rightButton = this.add.image(400, 180, TEXTURES, "lobby/buttons/right_select_button_01.png");
+    this.rightButton.setOrigin(0, 0);
+    this.rightButton.setInteractive();
 
-		this.updateStageInfo();
-	},
+    this.rightButton.on('pointerover', () => {
+      this.rightButton.setFrame("lobby/buttons/right_select_button_02.png");
+    });
 
-	rightSelect: function() {
-		if(this.selectedStageIndex === stages.length - 1) {
-			this.selectedStageIndex = 0;
-		} else {
-			this.selectedStageIndex++;
-		}
+    this.rightButton.on('pointerout', () => {
+      this.rightButton.setFrame("lobby/buttons/right_select_button_01.png");
+    });
 
-		this.updateStageInfo();
-	},
+    this.rightButton.on('pointerdown', () => {
+      window.buttonClickSound.play();
+      this.rightSelect();
+    });
 
-	update: function() {
-		repeatingBombTilesprite.tilePosition.x++;
-		repeatingBombTilesprite.tilePosition.y--;
-	},
+    this.okButton = this.add.image(495, 460, TEXTURES, "lobby/buttons/ok_button_01.png");
+    this.okButton.setOrigin(0, 0);
+    this.okButton.setInteractive();
 
-	updateStageInfo: function() {
-		var newStage = stages[this.selectedStageIndex];
-		this.text.setText(newStage.name);
-		this.numPlayersText.setText("Max # of players:   " + newStage.maxPlayers);
-		this.stageSizeText.setText("Map size:   " + newStage.size);
-		this.thumbnail.loadTexture(TEXTURES, newStage.thumbnailKey);
-	},
+    this.okButton.on('pointerover', () => {
+      this.okButton.setFrame("lobby/buttons/ok_button_02.png");
+    });
 
-	configureText: function(text, color, size) {
-		text.font = "Carter One";
-		text.fill = color;
-		text.fontSize = size;
-	},
+    this.okButton.on('pointerout', () => {
+      this.okButton.setFrame("lobby/buttons/ok_button_01.png");
+    });
 
-	confirmStageSelection: function() {
-		var selectedStage = stages[this.selectedStageIndex];
+    this.okButton.on('pointerdown', () => {
+      window.buttonClickSound.play();
+      this.confirmStageSelection();
+    });
 
-		socket.emit("select stage", {mapName: selectedStage.tilemapName});
-		game.state.start("PendingGame", true, false, selectedStage.tilemapName, this.gameId, repeatingBombTilesprite);
-	}
-};
+    this.thumbnail = this.add.image(thumbnailXOffset, thumbnailYOffset, TEXTURES, initialStage.thumbnailKey);
+    this.thumbnail.setOrigin(0, 0);
+
+    // Display title
+    this.text = this.add.text(this.cameras.main.width / 2, stageNameYOffset, initialStage.name);
+    this.configureText(this.text, "white", 28);
+    this.text.setOrigin(0.5, 0.5);
+
+    // Display number of players
+    this.numPlayersText = this.add.text(145, 390, "Max # of players:   " + initialStage.maxPlayers);
+    this.configureText(this.numPlayersText, "white", 18);
+
+    // Display stage size
+    this.stageSizeText = this.add.text(145, 420, "Map size:   " + initialStage.size);
+    this.configureText(this.stageSizeText, "white", 18);
+  }
+
+  leftSelect() {
+    if(this.selectedStageIndex === 0) {
+      this.selectedStageIndex = stages.length - 1;
+    } else {
+      this.selectedStageIndex--;
+    }
+
+    this.updateStageInfo();
+  }
+
+  rightSelect() {
+    if(this.selectedStageIndex === stages.length - 1) {
+      this.selectedStageIndex = 0;
+    } else {
+      this.selectedStageIndex++;
+    }
+
+    this.updateStageInfo();
+  }
+
+  update() {
+    if (repeatingBombTilesprite) {
+      repeatingBombTilesprite.tilePositionX++;
+      repeatingBombTilesprite.tilePositionY--;
+    }
+  }
+
+  updateStageInfo() {
+    const newStage = stages[this.selectedStageIndex];
+    this.text.setText(newStage.name);
+    this.numPlayersText.setText("Max # of players:   " + newStage.maxPlayers);
+    this.stageSizeText.setText("Map size:   " + newStage.size);
+    this.thumbnail.setFrame(newStage.thumbnailKey);
+  }
+
+  configureText(text, color, size) {
+    text.setFontFamily("Carter One");
+    text.setColor(color);
+    text.setFontSize(size);
+  }
+
+  confirmStageSelection() {
+    const selectedStage = stages[this.selectedStageIndex];
+
+    socket.emit("select stage", {mapName: selectedStage.tilemapName});
+    this.scene.start("PendingGame", { tilemapName: selectedStage.tilemapName, gameId: this.gameId, rbts: repeatingBombTilesprite });
+  }
+}
+
+module.exports = StageSelect;

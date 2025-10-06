@@ -1,55 +1,72 @@
-var BLACK_HEX_CODE = "#000000";
+// Phaser 3: Fader utility needs scene context
+const BLACK_HEX_CODE = 0x000000;
 
 module.exports = {
-	createFadeTween: function (alphaFrom, alphaTo, fadeDuration) {
-		fadeDuration = fadeDuration || 300;
+  fadeGraphic: null,
 
-		if(this.fadeGraphic) {
-			this.fadeGraphic.destroy();
-		}
+  createFadeTween: function(scene, alphaFrom, alphaTo, fadeDuration) {
+    fadeDuration = fadeDuration || 300;
 
-		this.fadeGraphic = game.add.graphics(0, 0);
-		this.fadeGraphic.beginFill(BLACK_HEX_CODE, 1);
-		this.fadeGraphic.drawRect(0, 0, game.camera.width, game.camera.height);
-		this.fadeGraphic.fixedToCamera = true;
+    if(this.fadeGraphic) {
+      this.fadeGraphic.destroy();
+    }
 
-		this.fadeGraphic.alpha = alphaFrom;
-		this.fadeGraphic.endFill();
+    // Phaser 3: graphics API changed
+    this.fadeGraphic = scene.add.graphics();
+    this.fadeGraphic.fillStyle(BLACK_HEX_CODE, 1);
+    this.fadeGraphic.fillRect(0, 0, scene.cameras.main.width, scene.cameras.main.height);
+    this.fadeGraphic.setScrollFactor(0); // Phaser 3: equivalent to fixedToCamera
 
-		var tween = game.add.tween(this.fadeGraphic);
-		tween.to({alpha: alphaTo}, fadeDuration, Phaser.Easing.Default);
-		return tween;
-	},
+    this.fadeGraphic.setAlpha(alphaFrom);
 
-	createFadeInTween: function(fadeDuration) {
-		return this.createFadeTween(1, 0, fadeDuration);
-	},
+    // Phaser 3: tweens.add instead of game.add.tween
+    const tween = scene.tweens.add({
+      targets: this.fadeGraphic,
+      alpha: alphaTo,
+      duration: fadeDuration,
+      ease: 'Linear',
+      paused: true
+    });
 
-	createFadeOutTween: function(fadeDuration) {
-		return this.createFadeTween(0, 1, fadeDuration);
-	},
+    return tween;
+  },
 
-	fadeOut: function(callback, callbackContext, fadeDuration) {
-		callbackContext = callbackContext ? callbackContext : this;
+  createFadeInTween: function(scene, fadeDuration) {
+    return this.createFadeTween(scene, 1, 0, fadeDuration);
+  },
 
-		var fadeOutTween = this.createFadeOutTween(fadeDuration);
-		
-		if(typeof callback === 'function') {
-			fadeOutTween.onComplete.add(callback, callbackContext);
-		}
+  createFadeOutTween: function(scene, fadeDuration) {
+    return this.createFadeTween(scene, 0, 1, fadeDuration);
+  },
 
-		fadeOutTween.start();
-	},
+  fadeOut: function(callback, callbackContext, fadeDuration) {
+    // Get current active scene
+    const scene = window.game.scene.scenes.find(s => s.scene.isActive());
+    if (!scene) return;
 
-	fadeIn: function(callback, callbackContext, fadeDuration) {
-		callbackContext = callbackContext ? callbackContext : this;
+    callbackContext = callbackContext || this;
 
-		var fadeInTween = this.createFadeInTween(fadeDuration);
+    const fadeOutTween = this.createFadeOutTween(scene, fadeDuration);
 
-		if(typeof callback === 'function') {
-			fadeInTween.onComplete.add(callback, this);
-		}
+    if(typeof callback === 'function') {
+      fadeOutTween.on('complete', callback, callbackContext);
+    }
 
-		fadeInTween.start();
-	}
+    fadeOutTween.play();
+  },
+
+  fadeIn: function(callback, callbackContext, fadeDuration) {
+    const scene = window.game.scene.scenes.find(s => s.scene.isActive());
+    if (!scene) return;
+
+    callbackContext = callbackContext || this;
+
+    const fadeInTween = this.createFadeInTween(scene, fadeDuration);
+
+    if(typeof callback === 'function') {
+      fadeInTween.on('complete', callback, callbackContext);
+    }
+
+    fadeInTween.play();
+  }
 }

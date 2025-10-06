@@ -1,5 +1,6 @@
+// Phaser 3: Text configuration API changed
 exports.configureText = function(text, color, size) {
-	text.font = "Carter One";
-	text.fill = color;
-	text.fontSize = size;
+  text.setFontFamily("Carter One");
+  text.setColor(color);
+  text.setFontSize(size);
 }

@@ -6,18 +6,31 @@ notificationImageMap[PowerupIds.BOMB_CAPACITY] = "gamesprites/bomb_count_notific
 notificationImageMap[PowerupIds.SPEED] = "gamesprites/speed_notification.png";
 
 exports.showPowerupNotification = function(powerupId, playerX, playerY) {
-    var notificationImageKey = notificationImageMap[powerupId];
-    var image = new Phaser.Image(game, playerX, playerY - 10, TEXTURES, notificationImageKey);
-    image.anchor.setTo(.5, .5);
-    game.add.existing(image);
+  // Get the Level scene
+  const scene = window.game.scene.getScene('Level');
+  if (!scene) return;
 
-    var upwardMotionTween = game.add.tween(image);
-    upwardMotionTween.to({y: image.y - 30}, 600, Phaser.Easing.Default, true, 0);
+  const notificationImageKey = notificationImageMap[powerupId];
 
-    var fadeTween = game.add.tween(image);
-    fadeTween.to({alpha: 0}, 600, Phaser.Easing.Default, true, 0);
-    
-    upwardMotionTween.onComplete.addOnce(function(obj) {
-      obj.destroy();
-    });
+  // Phaser 3: add.image instead of new Phaser.Image
+  const image = scene.add.image(playerX, playerY - 10, TEXTURES, notificationImageKey);
+  image.setOrigin(0.5, 0.5);
+
+  // Phaser 3: tweens.add for both tweens
+  scene.tweens.add({
+    targets: image,
+    y: image.y - 30,
+    duration: 600,
+    ease: 'Linear'
+  });
+
+  scene.tweens.add({
+    targets: image,
+    alpha: 0,
+    duration: 600,
+    ease: 'Linear',
+    onComplete: () => {
+      image.destroy();
+    }
+  });
 }

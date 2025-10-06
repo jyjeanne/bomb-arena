@@ -1,112 +1,143 @@
 var TextConfigurer = require('../util/text_configurer');
 
-var screenWidth = 600;
+const screenWidth = 600;
+const xOffset = 100 - screenWidth;
+const yOffset = 60;
+const headerXOffset = 150 - screenWidth;
+const headerYOffset = 65;
+const winnerPicXOffset = 225 - screenWidth;
+const winnerPicYOffset = 310;
+const defaultTextXOffset = 220 - screenWidth;
+const defaultTextYOffset = 220;
+const singleWinnerText = "Winner is...";
+const roundEndTieText = "Draw! Winners are...";
 
-var xOffset = 100 - screenWidth;
-var yOffset = 60;
+// Phaser 3: Convert to Container instead of Group
+class RoundEndAnimation extends Phaser.GameObjects.Container {
+  constructor(scene, roundNumber, winningColors) {
+    super(scene);
 
-var headerXOffset = 150 - screenWidth;
-var headerYOffset = 65;
+    this.scene = scene;
+    this.winnerImageIndices = [];
 
-var winnerPicXOffset = 225 - screenWidth;
-var winnerPicYOffset = 310;
+    // Add to scene
+    scene.add.existing(this);
 
-var defaultTextXOffset = 220 - screenWidth;
-var defaultTextYOffset = 220;
+    // Create round end window
+    const roundEndWindow = scene.add.image(xOffset, yOffset, TEXTURES, "lobby/end_of_round_window.png");
+    roundEndWindow.setOrigin(0, 0);
 
-var singleWinnerText = "Winner is...";
-var roundEndTieText = "Draw! Winners are...";
+    const header = scene.add.text(headerXOffset, headerYOffset, "Round " + roundNumber + " Complete!");
+    TextConfigurer.configureText(header, "white", 32);
 
-function RoundEndAnimation(game, roundNumber, winningColors) {
-	Phaser.Group.call(this, game);
+    // Text and offset differ based on whether there was a tie
+    const actualTextXOffset = winningColors.length > 1 ? defaultTextXOffset - 55 : defaultTextXOffset;
+    const actualTextToDisplay = winningColors.length > 1 ? roundEndTieText : singleWinnerText;
 
-	var roundEndWindow = game.add.image(xOffset, yOffset, TEXTURES, "lobby/end_of_round_window.png");
+    const textObject = scene.add.text(actualTextXOffset, defaultTextYOffset, actualTextToDisplay);
+    TextConfigurer.configureText(textObject, "white", 28);
+    textObject.setAlpha(0);
 
-	var header = game.add.text(headerXOffset, headerYOffset, "Round " + roundNumber + " Complete!")
-	TextConfigurer.configureText(header, "white", 32);
+    // Add children to container
+    this.add(roundEndWindow);
+    this.add(header);
+    this.add(textObject);
 
-	// Text and offset differ based on whether or not there was a tie.
-	var actualTextXOffset = winningColors.length > 1 ? defaultTextXOffset - 55 : defaultTextXOffset;
-	var actualTextToDisplay = winningColors.length > 1 ? roundEndTieText : singleWinnerText;
+    this.createAndAddWinnerImages(winningColors);
+  }
 
-	var textObject = game.add.text(actualTextXOffset, defaultTextYOffset, actualTextToDisplay);
-	TextConfigurer.configureText(textObject, "white", 28);
-	textObject.alpha = 0;
+  createAndAddWinnerImages(winningColors) {
+    let index = 3; // 3 is the index of the first winner image
 
-	this.add(roundEndWindow);
-	this.add(header);
-	this.add(textObject);
-	
-	this.createAndAddWinnerImages(winningColors);
-};
+    winningColors.forEach((color) => {
+      const winnerPicImage = this.scene.add.image(winnerPicXOffset, winnerPicYOffset, TEXTURES, "lobby/bomberman_head/bomberman_head_" + color + ".png");
+      winnerPicImage.setOrigin(0, 0);
+      winnerPicImage.setScale(1.75, 1.75);
+      winnerPicImage.setAlpha(0);
 
-RoundEndAnimation.prototype = Object.create(Phaser.Group.prototype);
+      this.add(winnerPicImage);
+      this.winnerImageIndices.push(index++);
+    });
+  }
 
-RoundEndAnimation.prototype.createAndAddWinnerImages = function(winningColors) {
-	this.winnerImageIndices = [];
-	var index = 3; // 3 is the index of the first winner image.
+  beginAnimation(callback) {
+    // Entrance tween
+    const entranceTween = this.scene.tweens.add({
+      targets: this,
+      x: screenWidth,
+      duration: 300,
+      ease: 'Linear',
+      onComplete: () => {
+        winnerTextTween.play();
+      }
+    });
 
-	winningColors.forEach(function(color) {
-		var winnerPicImage = new Phaser.Image(game, winnerPicXOffset, winnerPicYOffset, TEXTURES, "lobby/bomberman_head/bomberman_head_" + color + ".png");
+    // Winner text tween
+    const winnerTextTween = this.scene.tweens.add({
+      targets: this.list[2], // textObject is at index 2
+      alpha: 1,
+      duration: 800,
+      ease: 'Linear',
+      paused: true,
+      onComplete: () => {
+        winnerDisplayTween.play();
+      }
+    });
 
-		winnerPicImage.scale = {x: 1.75, y: 1.75};
-		winnerPicImage.alpha = 0;
+    // Exit tween
+    const exitTween = this.scene.tweens.add({
+      targets: this,
+      x: 2 * screenWidth,
+      duration: 300,
+      delay: 200,
+      ease: 'Linear',
+      paused: true,
+      onComplete: () => {
+        callback();
+        this.destroy();
+      }
+    });
 
-		game.add.existing(winnerPicImage);
-		this.add(winnerPicImage);
-		this.winnerImageIndices.push(index++);
-	}, this);
-};
+    // Winner images display tween
+    const winnerDisplayTween = this.generateWinnerImageTween(this.winnerImageIndices, exitTween);
+  }
 
-RoundEndAnimation.prototype.beginAnimation = function(callback) {
-	var entranceTween = game.add.tween(this);
-	entranceTween.to({x: screenWidth}, 300);
-	entranceTween.onComplete.addOnce(function() {
-		winnerTextTween.start();
-	}, this);
+  generateWinnerImageTween(indices, nextTween) {
+    const winnerImageTweens = [];
 
-	var winnerTextTween = game.add.tween(this.children[2]);
-	winnerTextTween.to({alpha: 1}, 800);
-	winnerTextTween.onComplete.addOnce(function() {
-		winnerDisplayTween.start();
-	}, this);
+    for (let i = 0; i < indices.length; i++) {
+      const tween = this.scene.tweens.add({
+        targets: this.list[indices[i]],
+        alpha: 1,
+        duration: 900,
+        ease: 'Linear',
+        paused: true,
+        onComplete: () => {
+          if (i < indices.length - 1) {
+            // Fade out and start next
+            this.scene.tweens.add({
+              targets: this.list[indices[i]],
+              alpha: 0,
+              duration: 900,
+              ease: 'Linear',
+              onComplete: () => {
+                if (winnerImageTweens[i + 1]) {
+                  winnerImageTweens[i + 1].play();
+                }
+              }
+            });
+          } else {
+            // Last winner, start exit tween
+            nextTween.play();
+          }
+        }
+      });
 
-	var exitTween = game.add.tween(this);
-	exitTween.to({x: 2 * screenWidth}, 300, Phaser.Easing.Default, false, 200);
-	exitTween.onComplete.addOnce(function() {
-		callback();
-		this.destroy();
-	}, this);
+      winnerImageTweens.push(tween);
+    }
 
-	var winnerDisplayTween = this.generateWinnerImageTween(this.winnerImageIndices, exitTween);
-
-	entranceTween.start();
-};
-
-// TODO: Make it so that the very last winner image tween doesn't fade out.
-RoundEndAnimation.prototype.generateWinnerImageTween = function(indices, nextTween) {
-	var winnerImageTweens = [];
-	var ctx = this;
-	for (var i = 0; i < indices.length; i++) {
-		(function(n) {
-			var tween = game.add.tween(ctx.children[indices[n]]);
-			tween.to({alpha: 1}, 900);
-			if(i < indices.length - 1) {
-				tween.to({alpha: 0}, 900);
-				tween.onComplete.addOnce(function() {
-					winnerImageTweens[n + 1].start();
-				});
-			} else {
-				tween.onComplete.addOnce(function() {
-					nextTween.start();
-				}, ctx);
-			}
-	
-			winnerImageTweens.push(tween);
-		})(i);
-	}
-
-	return winnerImageTweens[0];
-};
+    return winnerImageTweens[0];
+  }
+}
 
 module.exports = RoundEndAnimation;
