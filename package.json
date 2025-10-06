@@ -1,5 +1,5 @@
 {
-  "name": "bomb-arena",
+  "name": "bomb-area",
   "version": "1.0.0",
   "description": "An HTML5 multiplayer bomberman like game.",
   "main": "game.js",
@@ -9,7 +9,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/jyjeanne/bomb-arena.git"
+    "url": "https://github.com/jyjeanne/bomb-area.git"
   },
   "author": "TBA",
   "license": "ISC",
