@@ -1,4 +1,4 @@
-var BLACK_HEX_CODE = "#000000";
+var BLACK_HEX_CODE = 0x000000; // Phaser 3 uses hex number not string
 var TILE_SIZE = 40;
 
 var PowerupIDs = require("../../../../common/powerup_ids");
@@ -11,24 +11,23 @@ var RoundEndAnimation = require("../entities/round_end_animation");
 var PowerupImageKeys = require("../util/powerup_image_keys");
 var PowerupNotificationPlayer = require("../util/powerup_notification_player");
 
-var Level = function () {};
+class Level extends Phaser.Scene {
+  constructor() {
+    super({ key: 'Level' });
+    this.remotePlayers = {};
+    this.gameFrozen = true;
+  }
 
-module.exports = Level;
+  init(data) {
+    // Phaser 3: data passed via object
+    this.tilemapName = data.tilemapName;
+    this.players = data.players;
+    this.playerId = data.id;
+  }
 
-Level.prototype = {
-  remotePlayers: {},
-
-  gameFrozen: true,
-
-  init: function(tilemapName, players, id) {
-    this.tilemapName = tilemapName;
-    this.players = players;
-    this.playerId = id;
-  },
-
-  setEventHandlers: function() {
-    // Remember - these will actually be executed from the context of the Socket, not from the context of the level.
-    socket.on("disconnect", this.onSocketDisconnect);
+  setEventHandlers() {
+    // Socket.io event handlers - bind to this scene
+    socket.on("disconnect", this.onSocketDisconnect.bind(this));
     socket.on("m", this.onMovePlayer.bind(this));
     socket.on("remove player", this.onRemovePlayer.bind(this));
     socket.on("kill player", this.onKillPlayer.bind(this));
@@ -38,71 +37,85 @@ Level.prototype = {
     socket.on("end game", this.onEndGame.bind(this));
     socket.on("no opponents left", this.onNoOpponentsLeft.bind(this));
     socket.on("powerup acquired", this.onPowerupAcquired.bind(this));
-  },
+  }
 
-  create: function () {
-    level = this;
-    this.lastFrameTime;
+  create() {
+    window.level = this; // Keep global reference for socket handlers
+    this.lastFrameTime = null;
     this.deadGroup = [];
 
     this.initializeMap();
 
-    this.bombs = game.add.group();
+    // Phaser 3: Groups are created differently
+    this.bombs = this.physics.add.group();
     this.items = {};
-    game.physics.enable(this.bombs, Phaser.Physics.ARCADE);
-    game.physics.arcade.enable(this.blockLayer);
+
+    // Phaser 3: Physics is enabled via physics.add.existing
+    // blockLayer physics will be handled via collider
 
     this.setEventHandlers();
     this.initializePlayers();
 
+    // Set up collisions
+    if (window.player) {
+      this.physics.add.collider(window.player, this.blockLayer);
+      this.physics.add.collider(window.player, this.bombs);
+    }
+
     this.createDimGraphic();
     this.beginRoundAnimation("round_text/round_1.png");
-  },
+  }
 
-  createDimGraphic: function() {
-    this.dimGraphic = game.add.graphics(0, 0);
-    this.dimGraphic.alpha = .7;
-    this.dimGraphic.beginFill(BLACK_HEX_CODE, 1); // (color, alpha)
-    this.dimGraphic.drawRect(0, 0, game.camera.width, game.camera.height);
-    this.dimGraphic.endFill(); // Draw to canvas
-  },
+  createDimGraphic() {
+    this.dimGraphic = this.add.graphics();
+    this.dimGraphic.setAlpha(0.7);
+    this.dimGraphic.fillStyle(BLACK_HEX_CODE, 1);
+    this.dimGraphic.fillRect(0, 0, this.cameras.main.width, this.cameras.main.height);
+  }
 
-  restartGame: function() {
+  restartGame() {
     this.dimGraphic.destroy();
 
-    player.reset();
-    for(var i in this.remotePlayers) {
+    if (window.player) {
+      window.player.reset();
+    }
+
+    for(let i in this.remotePlayers) {
       this.remotePlayers[i].reset();
     }
 
     this.deadGroup = [];
-    this.lastFrameTime;
+    this.lastFrameTime = null;
     this.tearDownMap();
     this.initializeMap();
-    this.bombs.destroy(true);
+
+    // Phaser 3: clear and recreate group
+    this.bombs.clear(true, true);
     this.destroyItems();
-    this.bombs = new Phaser.Group(game);
-    game.world.setChildIndex(this.bombs, 2);
+
+    // Re-setup collisions
+    if (window.player) {
+      this.physics.add.collider(window.player, this.blockLayer);
+      this.physics.add.collider(window.player, this.bombs);
+    }
 
     this.gameFrozen = false;
     socket.emit("ready for round");
-  },
+  }
 
-  destroyItems: function() {
-    for(var itemKey in this.items) {
+  destroyItems() {
+    for(let itemKey in this.items) {
       this.items[itemKey].destroy();
     }
-
     this.items = {};
-  },
+  }
 
-  onNewRound: function(data) {
+  onNewRound(data) {
     this.createDimGraphic();
-    var datAnimationDoe = new RoundEndAnimation(game, data.completedRoundNumber, data.roundWinnerColors);
+    const animation = new RoundEndAnimation(this, data.completedRoundNumber, data.roundWinnerColors);
     this.gameFrozen = true;
 
-
-    var roundImage;
+    let roundImage;
     if(data.completedRoundNumber < 2) {
       roundImage = "round_text/round_" + (data.completedRoundNumber + 1) + ".png";
     } else if (data.completedRoundNumber == 2) {
@@ -111,50 +124,69 @@ Level.prototype = {
       roundImage = "round_text/tiebreaker.png";
     }
 
-    datAnimationDoe.beginAnimation(this.beginRoundAnimation.bind(this, roundImage, this.restartGame.bind(this)));
-  },
+    animation.beginAnimation(() => {
+      this.beginRoundAnimation(roundImage, this.restartGame.bind(this));
+    });
+  }
 
-  onEndGame: function(data) {
-    // TODO: Tear down the state.
+  onEndGame(data) {
     this.createDimGraphic();
     this.gameFrozen = true;
-    var animation = new RoundEndAnimation(game, data.completedRoundNumber, data.roundWinnerColors);
-    animation.beginAnimation(function() {
-      game.state.start("GameOver", true, false, data.gameWinnerColor, false);
+    const animation = new RoundEndAnimation(this, data.completedRoundNumber, data.roundWinnerColors);
+    animation.beginAnimation(() => {
+      this.scene.start("GameOver", { gameWinnerColor: data.gameWinnerColor, noOpponents: false });
     });
-  },
+  }
 
-  onNoOpponentsLeft: function(data) {
-    game.state.start("GameOver", true, false, null, true);
-  },
+  onNoOpponentsLeft(data) {
+    this.scene.start("GameOver", { gameWinnerColor: null, noOpponents: true });
+  }
 
-  beginRoundAnimation: function(image, callback) {
-    var beginRoundText = game.add.image(-600, game.camera.height / 2, TEXTURES, image);
-    beginRoundText.anchor.setTo(.5, .5);
+  beginRoundAnimation(image, callback) {
+    const beginRoundText = this.add.image(-600, this.cameras.main.height / 2, TEXTURES, image);
+    beginRoundText.setOrigin(0.5, 0.5);
 
-    var tween = game.add.tween(beginRoundText);
-    tween.to({x: game.camera.width / 2}, 300).to({x: 1000}, 300, Phaser.Easing.Default, false, 800).onComplete.add(function() {
-      this.dimGraphic.destroy();
-      beginRoundText.destroy();
-      this.gameFrozen = false;
+    // Phaser 3: chain tweens differently
+    const timeline = this.tweens.createTimeline();
 
-      if(callback) {
-        callback();
+    timeline.add({
+      targets: beginRoundText,
+      x: this.cameras.main.width / 2,
+      duration: 300,
+      ease: 'Linear'
+    });
+
+    timeline.add({
+      targets: beginRoundText,
+      x: 1000,
+      duration: 300,
+      delay: 800,
+      ease: 'Linear',
+      onComplete: () => {
+        this.dimGraphic.destroy();
+        beginRoundText.destroy();
+        this.gameFrozen = false;
+
+        if(callback) {
+          callback();
+        }
       }
-    }, this);
+    });
 
-    tween.start();
-  },
+    timeline.play();
+  }
 
-  update: function() {
-    if(player != null && player.alive == true) {
+  update() {
+    if(window.player != null && window.player.active) {
       if(this.gameFrozen) {
-        player.freeze();
+        window.player.freeze();
       } else {
-        player.handleInput();
-        for(var itemKey in this.items) {
-          var item = this.items[itemKey];
-          game.physics.arcade.overlap(player, item, function(p, i) {
+        window.player.handleInput();
+
+        // Check powerup overlaps
+        for(let itemKey in this.items) {
+          const item = this.items[itemKey];
+          this.physics.overlap(window.player, item, () => {
             socket.emit("powerup overlap", {x: item.x, y: item.y});
           });
         }
@@ -164,179 +196,197 @@ Level.prototype = {
     this.stopAnimationForMotionlessPlayers();
     this.storePreviousPositions();
 
-    for(var id in this.remotePlayers) {
+    for(let id in this.remotePlayers) {
       this.remotePlayers[id].interpolate(this.lastFrameTime);
     }
 
-    this.lastFrameTime = game.time.now;
+    this.lastFrameTime = this.time.now;
 
     this.destroyDeadSprites();
-  },
+  }
 
-  destroyDeadSprites: function() {
-    level.deadGroup.forEach(function(deadSprite) {
+  destroyDeadSprites() {
+    this.deadGroup.forEach((deadSprite) => {
       deadSprite.destroy();
     });
-  },
+    this.deadGroup = [];
+  }
 
-  render: function() {
-    if(window.debugging == true) {
-      game.debug.body(player);
+  storePreviousPositions() {
+    for(let id in this.remotePlayers) {
+      const remotePlayer = this.remotePlayers[id];
+      remotePlayer.previousPosition = {x: remotePlayer.x, y: remotePlayer.y};
     }
-  },
+  }
 
-  storePreviousPositions: function() {
-    for(var id in this.remotePlayers) {
-      remotePlayer = this.remotePlayers[id];
-      remotePlayer.previousPosition = {x: remotePlayer.position.x, y: remotePlayer.position.y};
-    }
-  },
-
-  stopAnimationForMotionlessPlayers: function() {
-    for(var id in this.remotePlayers) {
-      remotePlayer = this.remotePlayers[id];
-      if(remotePlayer.lastMoveTime < game.time.now - 200) {
-        remotePlayer.animations.stop();
+  stopAnimationForMotionlessPlayers() {
+    for(let id in this.remotePlayers) {
+      const remotePlayer = this.remotePlayers[id];
+      if(remotePlayer.lastMoveTime < this.time.now - 200) {
+        remotePlayer.stop();
       }
     }
-  },
+  }
 
-  onSocketDisconnect: function() {
+  onSocketDisconnect() {
     console.log("Disconnected from socket server.");
+  }
 
-    this.broadcast.emit("remove player", {id: this.id});
-  },
-
-  initializePlayers: function() {
-    for(var i in this.players) {
-      var data = this.players[i];
+  initializePlayers() {
+    for(let i in this.players) {
+      const data = this.players[i];
       if(data.id == this.playerId) {
-        player = new Player(data.x, data.y, data.id, data.color);
+        window.player = new Player(this, data.x, data.y, data.id, data.color);
       } else {
-        this.remotePlayers[data.id] = new RemotePlayer(data.x, data.y, data.id, data.color);
+        this.remotePlayers[data.id] = new RemotePlayer(this, data.x, data.y, data.id, data.color);
       }
     }
-  },
+  }
 
-  tearDownMap: function() {
+  tearDownMap() {
+    if (this.map) {
       this.map.destroy();
+    }
+    if (this.groundLayer) {
       this.groundLayer.destroy();
+    }
+    if (this.blockLayer) {
       this.blockLayer.destroy();
-  },
+    }
+  }
 
-  initializeMap: function() {
-    // This call to add.tilemap doesn't actually add anything to the game, it just creates a tilemap.
-    this.map = game.add.tilemap(this.tilemapName);
-    var mapInfo = MapInfo[this.tilemapName];
+  initializeMap() {
+    // Phaser 3: tilemap creation changed significantly
+    this.map = this.make.tilemap({ key: this.tilemapName });
+    const mapInfo = MapInfo[this.tilemapName];
 
-    this.map.addTilesetImage(mapInfo.tilesetName, mapInfo.tilesetImage, 40, 40);
+    const tileset = this.map.addTilesetImage(mapInfo.tilesetName, mapInfo.tilesetImage);
 
-    this.groundLayer = new Phaser.TilemapLayer(game, this.map, this.map.getLayerIndex(mapInfo.groundLayer), game.width, game.height);
-    game.world.addAt(this.groundLayer, 0);
-    this.groundLayer.resizeWorld();
+    // Phaser 3: createLayer instead of TilemapLayer constructor
+    this.groundLayer = this.map.createLayer(mapInfo.groundLayer, tileset, 0, 0);
+    this.blockLayer = this.map.createLayer(mapInfo.blockLayer, tileset, 0, 0);
 
-    this.blockLayer = new Phaser.TilemapLayer(game, this.map, this.map.getLayerIndex(mapInfo.blockLayer), game.width, game.height);
-    game.world.addAt(this.blockLayer, 1);
-    this.blockLayer.resizeWorld(); // Set the world size to match the size of this layer.
+    // Phaser 3: setCollision works similarly
+    this.blockLayer.setCollisionByExclusion([-1]); // Collide with all tiles except -1 (empty)
 
-    this.map.setCollision(mapInfo.collisionTiles, true, mapInfo.blockLayer);
+    // Alternative: use specific collision tiles if needed
+    // this.map.setCollision(mapInfo.collisionTiles, true, false, mapInfo.blockLayer);
 
-    // Send map data to server so it can do collisions.
-    // TODO: do not allow the game to start until this operation is complete.
-    var blockLayerData = game.cache.getTilemapData(this.tilemapName).data.layers[1];
+    // Send map data to server
+    const blockLayerData = this.cache.tilemap.get(this.tilemapName).data.layers[1];
 
-    socket.emit("register map", {tiles: blockLayerData.data, height: blockLayerData.height, width: blockLayerData.width, destructibleTileId: mapInfo.destructibleTileId});
-  },
+    socket.emit("register map", {
+      tiles: blockLayerData.data,
+      height: blockLayerData.height,
+      width: blockLayerData.width,
+      destructibleTileId: mapInfo.destructibleTileId
+    });
+  }
 
-  onMovePlayer: function(data) {
-    if(player && data.id == player.id || this.gameFrozen) {
+  onMovePlayer(data) {
+    if((window.player && data.id == window.player.id) || this.gameFrozen) {
       return;
     }
 
-    var movingPlayer = this.remotePlayers[data.id];
+    const movingPlayer = this.remotePlayers[data.id];
+
+    if (!movingPlayer) {
+      return;
+    }
 
     if(movingPlayer.targetPosition) {
-      movingPlayer.animations.play(data.f);
-      movingPlayer.lastMoveTime = game.time.now;
+      movingPlayer.play(`${movingPlayer.animKey}_${data.f}`, true);
+      movingPlayer.lastMoveTime = this.time.now;
 
       if(data.x == movingPlayer.targetPosition.x && data.y == movingPlayer.targetPosition.y) {
         return;
       }
 
-      movingPlayer.position.x = movingPlayer.targetPosition.x;
-      movingPlayer.position.y = movingPlayer.targetPosition.y;
+      movingPlayer.x = movingPlayer.targetPosition.x;
+      movingPlayer.y = movingPlayer.targetPosition.y;
 
-      movingPlayer.distanceToCover = {x: data.x - movingPlayer.targetPosition.x, y: data.y - movingPlayer.targetPosition.y};
-      movingPlayer.distanceCovered = {x: 0, y:0};
+      movingPlayer.distanceToCover = {
+        x: data.x - movingPlayer.targetPosition.x,
+        y: data.y - movingPlayer.targetPosition.y
+      };
+      movingPlayer.distanceCovered = {x: 0, y: 0};
     }
 
     movingPlayer.targetPosition = {x: data.x, y: data.y};
-  },
+  }
 
-  onRemovePlayer: function(data) {
-    var playerToRemove = this.remotePlayers[data.id];
+  onRemovePlayer(data) {
+    const playerToRemove = this.remotePlayers[data.id];
 
-    if(playerToRemove.alive) {
+    if(playerToRemove && playerToRemove.active) {
       playerToRemove.destroy();
     }
 
     delete this.remotePlayers[data.id];
     delete this.players[data.id];
-  },
+  }
 
-  onKillPlayer: function(data) {
-    if(data.id == player.id) {
+  onKillPlayer(data) {
+    if(window.player && data.id == window.player.id) {
       console.log("You've been killed.");
-
-      player.kill();
+      window.player.setActive(false);
+      window.player.setVisible(false);
     } else {
-      var playerToRemove = this.remotePlayers[data.id];
-
-      playerToRemove.kill();
+      const playerToRemove = this.remotePlayers[data.id];
+      if (playerToRemove) {
+        playerToRemove.setActive(false);
+        playerToRemove.setVisible(false);
+      }
     }
-  },
+  }
 
-  onPlaceBomb: function(data) {
-   this.bombs.add(new Bomb(data.x, data.y, data.id));
-  },
+  onPlaceBomb(data) {
+    const bomb = new Bomb(this, data.x, data.y, data.id);
+    this.bombs.add(bomb);
+  }
 
-  onDetonate: function(data) {
-    Bomb.renderExplosion(data.explosions);
+  onDetonate(data) {
+    Bomb.renderExplosion(this, data.explosions);
 
-    //remove bomb from group. bombs is a Phaser.Group to make collisions easier.
-    level.bombs.forEach(function(bomb) {
+    // Remove bomb from group
+    this.bombs.getChildren().forEach((bomb) => {
       if(bomb && bomb.id == data.id) {
         bomb.remove();
       }
-    }, level);
+    });
 
-    data.destroyedTiles.forEach(function(destroyedTile) {
-      this.map.removeTile(destroyedTile.col, destroyedTile.row, 1);
+    data.destroyedTiles.forEach((destroyedTile) => {
+      // Phaser 3: removeTileAt
+      this.map.removeTileAt(destroyedTile.col, destroyedTile.row, true, true, this.blockLayer);
+
       if(destroyedTile.itemId) {
         this.generateItemEntity(destroyedTile.itemId, destroyedTile.row, destroyedTile.col);
       }
-    }, this);
-  },
+    });
+  }
 
-  onPowerupAcquired: function(data) {
-    this.items[data.powerupId].destroy();
-    delete this.items[data.powerupId];
+  onPowerupAcquired(data) {
+    if (this.items[data.powerupId]) {
+      this.items[data.powerupId].destroy();
+      delete this.items[data.powerupId];
+    }
 
-    if(data.acquiringPlayerId === player.id) {
+    if(window.player && data.acquiringPlayerId === window.player.id) {
       AudioPlayer.playPowerupSound();
-      PowerupNotificationPlayer.showPowerupNotification(data.powerupType, player.x, player.y);
+      PowerupNotificationPlayer.showPowerupNotification(data.powerupType, window.player.x, window.player.y);
       if(data.powerupType == PowerupIDs.SPEED) {
-        player.applySpeedPowerup();
+        window.player.applySpeedPowerup();
       }
     }
-  },
-
-  generateItemEntity: function(itemId, row, col) {
-     var imageKey = PowerupImageKeys[itemId];
-     var item = new Phaser.Sprite(game, col * TILE_SIZE, row * TILE_SIZE, TEXTURES, imageKey);
-     game.physics.enable(item, Phaser.Physics.ARCADE);
-     this.items[row + "." + col] = item;
-
-     game.world.addAt(item, 2);
   }
-};
+
+  generateItemEntity(itemId, row, col) {
+    const imageKey = PowerupImageKeys[itemId];
+    const item = this.physics.add.sprite(col * TILE_SIZE, row * TILE_SIZE, TEXTURES, imageKey);
+    item.setOrigin(0, 0);
+    this.items[row + "." + col] = item;
+    item.setDepth(2);
+  }
+}
+
+module.exports = Level;

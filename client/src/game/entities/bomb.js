@@ -5,43 +5,74 @@ function getFrame(prefix, number) {
   return "gamesprites/" + prefix + "/" + prefix + "_" + number + ".png";
 }
 
-var Bomb = function(x, y, id) {
-	Phaser.Sprite.call(this, game, x, y, TEXTURES, "gamesprites/bomb/bomb_01.png");
-	this.id = id;
+// Phaser 3: Convert to ES6 class extending Phaser.Physics.Arcade.Sprite
+class Bomb extends Phaser.Physics.Arcade.Sprite {
+  constructor(scene, x, y, id) {
+    super(scene, x, y, TEXTURES, "gamesprites/bomb/bomb_01.png");
 
-	this.anchor.setTo(.5, .5);
-	game.physics.enable(this, Phaser.Physics.ARCADE);
-  this.body.immovable = true;
-	game.add.existing(this);
+    this.scene = scene;
+    this.id = id;
 
-  this.sizeTween = game.add.tween(this.scale).to({x: 1.2, y: 1.2}, 500, Phaser.Easing.Default, true, 0, true, true);
-}
+    this.setOrigin(0.5, 0.5);
 
-Bomb.prototype = Object.create(Phaser.Sprite.prototype);
+    scene.add.existing(this);
+    scene.physics.add.existing(this);
 
-Bomb.prototype.remove = function() {
-  this.destroy();
-  this.sizeTween.stop(); // stop tween and mark it for deletion
-};
+    this.body.immovable = true;
 
-Bomb.renderExplosion = function(explosions) {
-	explosions.forEach(function(explosion) {
-      var explosionSprite = new Phaser.Sprite(game, explosion.x, explosion.y, TEXTURES, getFrame(explosion.key, "01"));
-      explosionSprite.anchor.setTo(.5, .5);
-      explosionSprite.animations.add("explode", TextureUtil.getFrames(getFrame, explosion.key, ["02", "03", "04", "05"]));
-      explosionSprite.animations.getAnimation("explode").onComplete.add(function() {
-       level.deadGroup.push(this);
-      }, explosionSprite);
+    // Phaser 3: tweens.add instead of game.add.tween
+    this.sizeTween = scene.tweens.add({
+      targets: this.scale,
+      x: 1.2,
+      y: 1.2,
+      duration: 500,
+      ease: 'Linear',
+      yoyo: true,
+      repeat: -1
+    });
+  }
 
-      if(explosion.hide) {
-        game.world.addAt(explosionSprite, 1);
-      } else {
-        game.world.add(explosionSprite);
+  remove() {
+    if (this.sizeTween) {
+      this.sizeTween.stop();
+    }
+    this.destroy();
+  }
+
+  // Static method for rendering explosions
+  static renderExplosion(scene, explosions) {
+    explosions.forEach(function(explosion) {
+      const explosionSprite = scene.add.sprite(explosion.x, explosion.y, TEXTURES, getFrame(explosion.key, "01"));
+      explosionSprite.setOrigin(0.5, 0.5);
+
+      // Create animation if it doesn't exist
+      const animKey = `explosion_${explosion.key}`;
+      if (!scene.anims.exists(animKey)) {
+        const frames = TextureUtil.getFrames(getFrame, explosion.key, ["02", "03", "04", "05"]);
+        scene.anims.create({
+          key: animKey,
+          frames: frames.map(frame => ({ key: TEXTURES, frame: frame })),
+          frameRate: 17,
+          repeat: 0
+        });
       }
 
-      explosionSprite.play("explode", 17, false);
+      // Phaser 3: on('animationcomplete') instead of onComplete
+      explosionSprite.on('animationcomplete', () => {
+        scene.deadGroup.push(explosionSprite);
+      });
+
+      // Set depth based on hide flag
+      if(explosion.hide) {
+        explosionSprite.setDepth(1);
+      } else {
+        explosionSprite.setDepth(10);
+      }
+
+      explosionSprite.play(animKey);
       AudioPlayer.playBombSound();
     });
+  }
 }
 
 module.exports = Bomb;
