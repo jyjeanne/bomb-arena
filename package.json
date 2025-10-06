@@ -28,7 +28,7 @@
     "gulp-jshint": "^2.1.0",
     "gulp-uglify": "^1.0.2",
     "jshint": "^2.10.2",
-    "phaser": "^2.2.2",
+    "phaser": "^3.90.0",
     "vinyl-buffer": "^1.0.0",
     "vinyl-source-stream": "^1.0.0",
     "watchify": "^3.11.1"

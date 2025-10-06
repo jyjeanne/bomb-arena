@@ -1,33 +1,36 @@
 var AudioPlayer = require("../util/audio_player");
 
-var Boot = function () {};
+class Boot extends Phaser.Scene {
+  constructor() {
+    super({ key: 'Boot' });
+  }
 
-module.exports = Boot;
-
-Boot.prototype = {
-
-  preload: function () {
+  preload() {
     // Fill in later.
-  },
+  }
 
-  create: function () {
-    game.stage.disableVisibilityChange = true; // So that game doesn't stop when window loses focus.
-    game.input.maxPointers = 1;
+  create() {
+    // Phaser 3 handles visibility automatically, but you can configure it
+    this.game.events.on('hidden', () => {
+      // Game paused when hidden (optional)
+    });
+
+    this.game.events.on('visible', () => {
+      // Game resumed when visible (optional)
+    });
+
     AudioPlayer.initialize();
 
-    if (game.device.desktop) {
-      game.stage.scale.pageAlignHorizontally = true;
+    // Phaser 3 scale configuration (should be in game config, but can adjust here)
+    if (this.sys.game.device.os.desktop) {
+      // Desktop specific settings if needed
     } else {
-      game.stage.scaleMode = Phaser.StageScaleMode.SHOW_ALL;
-      game.stage.scale.minWidth =  480;
-      game.stage.scale.minHeight = 260;
-      game.stage.scale.maxWidth = 640;
-      game.stage.scale.maxHeight = 480;
-      game.stage.scale.forceLandscape = true;
-      game.stage.scale.pageAlignHorizontally = true;
-      game.stage.scale.setScreenSize(true);
+      // Mobile scaling - Phaser 3 handles this better in config
+      // Scale mode is set in main config
     }
 
-    game.state.start('Preloader');
+    this.scene.start('Preloader');
   }
-};
+}
+
+module.exports = Boot;
