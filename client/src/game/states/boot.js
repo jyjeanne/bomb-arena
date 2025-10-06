@@ -3,32 +3,36 @@ var AudioPlayer = require("../util/audio_player");
 class Boot extends Phaser.Scene {
   constructor() {
     super({ key: 'Boot' });
+    console.log("[BOOT] Scene constructor called");
   }
 
   preload() {
-    // Fill in later.
+    console.log("[BOOT] Preload phase");
   }
 
   create() {
+    console.log("[BOOT] Create phase - initializing game");
+
     // Phaser 3 handles visibility automatically, but you can configure it
     this.game.events.on('hidden', () => {
-      // Game paused when hidden (optional)
+      console.log("[BOOT] Game hidden");
     });
 
     this.game.events.on('visible', () => {
-      // Game resumed when visible (optional)
+      console.log("[BOOT] Game visible");
     });
 
     AudioPlayer.initialize();
+    console.log("[BOOT] Audio player initialized");
 
     // Phaser 3 scale configuration (should be in game config, but can adjust here)
     if (this.sys.game.device.os.desktop) {
-      // Desktop specific settings if needed
+      console.log("[BOOT] Desktop mode detected");
     } else {
-      // Mobile scaling - Phaser 3 handles this better in config
-      // Scale mode is set in main config
+      console.log("[BOOT] Mobile mode detected");
     }
 
+    console.log("[BOOT] Starting Preloader scene");
     this.scene.start('Preloader');
   }
 }

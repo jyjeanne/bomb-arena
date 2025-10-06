@@ -4,7 +4,10 @@
       "WebSearch",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(npm install)"
+      "Bash(npm install)",
+      "Bash(gulp)",
+      "Bash(timeout:*)",
+      "Bash(npx gulp:*)"
     ],
     "deny": [],
     "ask": []
