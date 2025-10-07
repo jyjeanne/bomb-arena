@@ -24,7 +24,10 @@ var updateInterval = 100; // Broadcast updates every 100 ms.
 
 // Serve up index.html.
 app.use(express.static("client"));
-server.listen(process.env.PORT || 8007);
+var port = process.env.PORT || 8007;
+server.listen(port, function() {
+	console.log("Server listening on port " + port);
+});
 
 init();
 
@@ -132,7 +135,10 @@ function onStartGame() {
 };
 
 function onRegisterMap(data) {
-	games[this.gameId].map = new Map(data, TILE_SIZE);
+	// Check if game exists before setting map
+	if (games[this.gameId]) {
+		games[this.gameId].map = new Map(data, TILE_SIZE);
+	}
 };
 
 function onMovePlayer(data) {
@@ -157,9 +163,16 @@ function onMovePlayer(data) {
 
 function onPlaceBomb(data) {
 	var game = games[this.gameId];
+
+	// Check if game exists before accessing its properties
+	if(!game || game.awaitingAcknowledgements) {
+		return;
+	}
+
 	var player = game.players[this.id];
 
-	if(game === undefined || game.awaitingAcknowledgements || player.numBombsAlive >= player.bombCapacity) {
+	// Check if player exists and hasn't exceeded bomb capacity
+	if(!player || player.numBombsAlive >= player.bombCapacity) {
 		return;
 	}
 

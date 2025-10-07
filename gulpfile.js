@@ -1,42 +1,46 @@
 var gulp = require('gulp'),
 	browserify = require('browserify'),
-	watchify = require('watchify'),
-	buffer = require('vinyl-buffer'),
 	connect = require('gulp-connect'),
-	source = require('vinyl-source-stream');
+	fs = require('fs'),
+	path = require('path');
 
 const paths = {
 	entry: './client/src/main.js',
-	dist: './client/dist/'
+	dist: './client/dist/',
+	output: './client/dist/bomb_arena.min.js'
 };
 
-// Gulp 4: Use function for compile task
+// Use native fs instead of gulp streams to avoid vinyl errors
 function compile(done) {
-	var bundler = browserify(paths.entry, watchify.args);
+	console.log('Bundling...');
 
-	var bundle = function() {
-		console.log('Bundling...');
-		return bundler
-			.bundle()
-			.on('error', function(err) {
-				console.error(err.toString());
-				this.emit('end');
-			})
-			.pipe(source('bomb_arena.min.js'))
-			.pipe(buffer())
-			// Skip uglify - doesn't support ES6
-			.pipe(gulp.dest(paths.dist))
-			.pipe(connect.reload());
-	};
+	const bundler = browserify(paths.entry);
 
-	bundler = watchify(bundler);
-	bundler.on('update', function() {
-		console.log('File changed, rebundling...');
-		bundle();
+	// Ensure dist directory exists
+	if (!fs.existsSync(paths.dist)) {
+		fs.mkdirSync(paths.dist, { recursive: true });
+	}
+
+	// Bundle to file using fs
+	bundler.bundle(function(err, buf) {
+		if (err) {
+			console.error('Browserify error:', err.toString());
+			done(err);
+			return;
+		}
+
+		fs.writeFile(paths.output, buf, function(writeErr) {
+			if (writeErr) {
+				console.error('Write error:', writeErr.toString());
+				done(writeErr);
+				return;
+			}
+
+			const sizeKB = (buf.length / 1024).toFixed(2);
+			console.log(`Bundling complete: ${sizeKB} KB written to ${paths.output}`);
+			done();
+		});
 	});
-	bundler.on('log', console.log);
-
-	return bundle();
 }
 
 function connectServer() {
@@ -47,7 +51,13 @@ function connectServer() {
 	});
 }
 
-// Gulp 4: Export tasks
+// Watch task for development
+function watch() {
+	gulp.watch('client/src/**/*.js', compile);
+}
+
+// Export tasks
 exports.compile = compile;
 exports.connect = connectServer;
-exports.default = gulp.parallel(connectServer, compile);
+exports.watch = watch;
+exports.default = gulp.series(compile, gulp.parallel(connectServer, watch));

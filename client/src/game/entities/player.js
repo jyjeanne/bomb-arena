@@ -24,9 +24,14 @@ class Player extends Phaser.Physics.Arcade.Sprite {
     scene.add.existing(this);
     scene.physics.add.existing(this);
 
-    // Phaser 3: body.setSize parameters changed
-    this.body.setSize(15, 16);
-    this.body.setOffset(1, 15);
+    // Phaser 3: Set body size and offset (offset is from sprite origin, not anchor)
+    // Player sprite is roughly 32x32, but body should be smaller for better gameplay
+    this.body.setSize(20, 20);
+    this.body.setOffset(6, 12); // Center the collision box on the character's feet area
+
+    // Add shadow under player
+    this.shadow = scene.add.ellipse(x, y + 12, 18, 6, 0x000000, 0.4);
+    this.shadow.setDepth(-1);
 
     // Create animations for this player color
     this.createAnimations(color);
@@ -137,6 +142,16 @@ class Player extends Phaser.Physics.Arcade.Sprite {
     }
   }
 
+  preUpdate(time, delta) {
+    super.preUpdate(time, delta);
+
+    // Update shadow position to follow player
+    if (this.shadow) {
+      this.shadow.x = this.x;
+      this.shadow.y = this.y + 12;
+    }
+  }
+
   freeze() {
     this.body.velocity.x = 0;
     this.body.velocity.y = 0;
@@ -145,6 +160,59 @@ class Player extends Phaser.Physics.Arcade.Sprite {
 
   applySpeedPowerup() {
     this.speed += PLAYER_SPEED_POWERUP_INCREMENT;
+  }
+
+  celebrate() {
+    // Victory jump animation
+    this.scene.tweens.add({
+      targets: this,
+      y: this.y - 30,
+      duration: 400,
+      ease: 'Quad.easeOut',
+      yoyo: true,
+      repeat: 2,
+      onUpdate: () => {
+        // Update shadow during jump
+        if (this.shadow) {
+          this.shadow.y = this.y + 12;
+        }
+      }
+    });
+
+    // Spin animation
+    this.scene.tweens.add({
+      targets: this,
+      angle: 360,
+      duration: 800,
+      ease: 'Linear',
+      repeat: 1
+    });
+
+    // Victory particles - confetti effect
+    const colors = [0xffff00, 0xff6600, 0x00ff00, 0x0099ff, 0xff00ff];
+    const particleEmitter = this.scene.add.particles(this.x, this.y - 20, TEXTURES, {
+      frame: 'gamesprites/bomb/bomb_01.png',
+      speed: { min: 100, max: 200 },
+      angle: { min: -120, max: -60 },
+      scale: { start: 0.3, end: 0.1 },
+      alpha: { start: 1, end: 0 },
+      lifespan: 1000,
+      gravityY: 300,
+      blendMode: 'ADD',
+      tint: colors,
+      quantity: 3,
+      frequency: 100,
+      maxParticles: 30
+    });
+    particleEmitter.setDepth(15);
+
+    // Stop particles after celebration
+    this.scene.time.delayedCall(1600, () => {
+      particleEmitter.stop();
+      this.scene.time.delayedCall(1000, () => {
+        particleEmitter.destroy();
+      });
+    });
   }
 
   getFrame(prefix, number) {
@@ -162,6 +230,13 @@ class Player extends Phaser.Physics.Arcade.Sprite {
     if(!this.active) {
       this.setActive(true);
       this.setVisible(true);
+    }
+
+    // Reset shadow visibility and position
+    if (this.shadow) {
+      this.shadow.setVisible(true);
+      this.shadow.x = this.x;
+      this.shadow.y = this.y + 12;
     }
   }
 }

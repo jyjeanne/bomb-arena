@@ -1,7 +1,12 @@
 /**
-* Modified this method to be able to ignore certain children, so that select elements (such as scrolling background) can be preserved
-* between states.
+* NOTE: Phaser.Group no longer exists in Phaser 3.
+* Groups work differently in Phaser 3 - they use Phaser.GameObjects.Group
+* This enhancement is disabled for Phaser 3 migration.
+* If needed, this functionality should be reimplemented using Phaser 3 Group API.
 */
+
+// Phaser 2 code - disabled for Phaser 3
+/*
 Phaser.Group.prototype.removeAll = function (destroy, silent) {
 
     if (typeof destroy === 'undefined') { destroy = false; }
@@ -37,3 +42,4 @@ Phaser.Group.prototype.removeAll = function (destroy, silent) {
     this.cursor = null;
 
 };
+*/

@@ -7,7 +7,13 @@
       "Bash(npm install)",
       "Bash(gulp)",
       "Bash(timeout:*)",
-      "Bash(npx gulp:*)"
+      "Bash(npx gulp:*)",
+      "Bash(npm start)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(taskkill:*)",
+      "Bash(magick identify:*)",
+      "Bash(magick:*)"
     ],
     "deny": [],
     "ask": []

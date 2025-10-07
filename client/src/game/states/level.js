@@ -43,8 +43,10 @@ class Level extends Phaser.Scene {
     window.level = this; // Keep global reference for socket handlers
     this.lastFrameTime = null;
     this.deadGroup = [];
+    this.colliders = []; // Store colliders so we can destroy them on restart
 
     this.initializeMap();
+    this.createAtmosphericEffects();
 
     // Phaser 3: Groups are created differently
     this.bombs = this.physics.add.group();
@@ -56,14 +58,70 @@ class Level extends Phaser.Scene {
     this.setEventHandlers();
     this.initializePlayers();
 
-    // Set up collisions
+    // Set up collisions and store them
     if (window.player) {
-      this.physics.add.collider(window.player, this.blockLayer);
-      this.physics.add.collider(window.player, this.bombs);
+      this.colliders.push(this.physics.add.collider(window.player, this.blockLayer));
+      this.colliders.push(this.physics.add.collider(window.player, this.bombs));
     }
 
     this.createDimGraphic();
     this.beginRoundAnimation("round_text/round_1.png");
+  }
+
+  createAtmosphericEffects() {
+    const width = this.cameras.main.width;
+    const height = this.cameras.main.height;
+
+    // Background gradient for depth
+    this.backgroundGradient = this.add.graphics();
+    this.backgroundGradient.setDepth(-10);
+
+    // Create a subtle radial gradient effect using multiple circles
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const maxRadius = Math.max(width, height);
+
+    for (let i = 0; i < 5; i++) {
+      const radius = maxRadius * (1 - i * 0.2);
+      const alpha = 0.15 - i * 0.03;
+      this.backgroundGradient.fillStyle(0x4a5568, alpha);
+      this.backgroundGradient.fillCircle(centerX, centerY, radius);
+    }
+
+    // Ambient lighting overlay - warm orange tint
+    this.ambientLight = this.add.graphics();
+    this.ambientLight.setDepth(-9);
+    this.ambientLight.fillStyle(0xff6600, 0.08);
+    this.ambientLight.fillRect(0, 0, width, height);
+
+    // Atmospheric particles - slow-moving dust/mist
+    const particleCount = 20;
+    this.atmosphericParticles = [];
+
+    for (let i = 0; i < particleCount; i++) {
+      const particle = this.add.circle(
+        Phaser.Math.Between(0, width),
+        Phaser.Math.Between(0, height),
+        Phaser.Math.Between(1, 3),
+        0xffffff,
+        Phaser.Math.FloatBetween(0.1, 0.3)
+      );
+      particle.setDepth(-8);
+      particle.setBlendMode(Phaser.BlendModes.ADD);
+
+      // Random slow floating motion
+      this.tweens.add({
+        targets: particle,
+        x: particle.x + Phaser.Math.Between(-100, 100),
+        y: particle.y + Phaser.Math.Between(-100, 100),
+        duration: Phaser.Math.Between(8000, 15000),
+        ease: 'Sine.easeInOut',
+        yoyo: true,
+        repeat: -1
+      });
+
+      this.atmosphericParticles.push(particle);
+    }
   }
 
   createDimGraphic() {
@@ -86,8 +144,21 @@ class Level extends Phaser.Scene {
 
     this.deadGroup = [];
     this.lastFrameTime = null;
+
+    // Phaser 3: Destroy old colliders before recreating map
+    if (this.colliders) {
+      this.colliders.forEach(collider => {
+        if (collider && collider.destroy) {
+          collider.destroy();
+        }
+      });
+      this.colliders = [];
+    }
+
     this.tearDownMap();
+    this.tearDownAtmosphericEffects();
     this.initializeMap();
+    this.createAtmosphericEffects();
 
     // Phaser 3: clear and recreate group
     this.bombs.clear(true, true);
@@ -95,8 +166,8 @@ class Level extends Phaser.Scene {
 
     // Re-setup collisions
     if (window.player) {
-      this.physics.add.collider(window.player, this.blockLayer);
-      this.physics.add.collider(window.player, this.bombs);
+      this.colliders.push(this.physics.add.collider(window.player, this.blockLayer));
+      this.colliders.push(this.physics.add.collider(window.player, this.bombs));
     }
 
     this.gameFrozen = false;
@@ -110,7 +181,25 @@ class Level extends Phaser.Scene {
     this.items = {};
   }
 
+  celebrateWinners(winnerColors) {
+    // Check if local player won
+    if (window.player && window.player.active && winnerColors.includes(window.player.color)) {
+      window.player.celebrate();
+    }
+
+    // Check remote players
+    for (let id in this.remotePlayers) {
+      const remotePlayer = this.remotePlayers[id];
+      if (remotePlayer.active && winnerColors.includes(remotePlayer.color)) {
+        remotePlayer.celebrate();
+      }
+    }
+  }
+
   onNewRound(data) {
+    // Trigger celebration for winning players
+    this.celebrateWinners(data.roundWinnerColors);
+
     this.createDimGraphic();
     const animation = new RoundEndAnimation(this, data.completedRoundNumber, data.roundWinnerColors);
     this.gameFrozen = true;
@@ -130,6 +219,9 @@ class Level extends Phaser.Scene {
   }
 
   onEndGame(data) {
+    // Trigger celebration for winning players
+    this.celebrateWinners(data.roundWinnerColors);
+
     this.createDimGraphic();
     this.gameFrozen = true;
     const animation = new RoundEndAnimation(this, data.completedRoundNumber, data.roundWinnerColors);
@@ -146,34 +238,35 @@ class Level extends Phaser.Scene {
     const beginRoundText = this.add.image(-600, this.cameras.main.height / 2, TEXTURES, image);
     beginRoundText.setOrigin(0.5, 0.5);
 
-    // Phaser 3: chain tweens differently
-    const timeline = this.tweens.createTimeline();
-
-    timeline.add({
+    // Phaser 3: Chain tweens using onComplete
+    this.tweens.add({
       targets: beginRoundText,
       x: this.cameras.main.width / 2,
       duration: 300,
-      ease: 'Linear'
-    });
-
-    timeline.add({
-      targets: beginRoundText,
-      x: 1000,
-      duration: 300,
-      delay: 800,
       ease: 'Linear',
       onComplete: () => {
-        this.dimGraphic.destroy();
-        beginRoundText.destroy();
-        this.gameFrozen = false;
+        // Wait 800ms then tween out
+        this.time.delayedCall(800, () => {
+          this.tweens.add({
+            targets: beginRoundText,
+            x: 1000,
+            duration: 300,
+            ease: 'Linear',
+            onComplete: () => {
+              if (this.dimGraphic) {
+                this.dimGraphic.destroy();
+              }
+              beginRoundText.destroy();
+              this.gameFrozen = false;
 
-        if(callback) {
-          callback();
-        }
+              if(callback) {
+                callback();
+              }
+            }
+          });
+        });
       }
     });
-
-    timeline.play();
   }
 
   update() {
@@ -240,6 +333,19 @@ class Level extends Phaser.Scene {
       } else {
         this.remotePlayers[data.id] = new RemotePlayer(this, data.x, data.y, data.id, data.color);
       }
+    }
+  }
+
+  tearDownAtmosphericEffects() {
+    if (this.backgroundGradient) {
+      this.backgroundGradient.destroy();
+    }
+    if (this.ambientLight) {
+      this.ambientLight.destroy();
+    }
+    if (this.atmosphericParticles) {
+      this.atmosphericParticles.forEach(particle => particle.destroy());
+      this.atmosphericParticles = [];
     }
   }
 
@@ -331,11 +437,17 @@ class Level extends Phaser.Scene {
       console.log("You've been killed.");
       window.player.setActive(false);
       window.player.setVisible(false);
+      if (window.player.shadow) {
+        window.player.shadow.setVisible(false);
+      }
     } else {
       const playerToRemove = this.remotePlayers[data.id];
       if (playerToRemove) {
         playerToRemove.setActive(false);
         playerToRemove.setVisible(false);
+        if (playerToRemove.shadow) {
+          playerToRemove.shadow.setVisible(false);
+        }
       }
     }
   }
@@ -367,7 +479,34 @@ class Level extends Phaser.Scene {
 
   onPowerupAcquired(data) {
     if (this.items[data.powerupId]) {
-      this.items[data.powerupId].destroy();
+      const item = this.items[data.powerupId];
+
+      // Destroy glow effect if it exists
+      if (item._glow) {
+        item._glow.destroy();
+      }
+
+      // Create sparkle effect when collected
+      const sparkles = this.add.particles(item.x + 20, item.y + 20, TEXTURES, {
+        frame: 'gamesprites/bomb/bomb_01.png',
+        speed: { min: 50, max: 100 },
+        angle: { min: 0, max: 360 },
+        scale: { start: 0.2, end: 0 },
+        alpha: { start: 1, end: 0 },
+        lifespan: 400,
+        blendMode: 'ADD',
+        tint: 0x00ffff,
+        quantity: 10,
+        duration: 100
+      });
+      sparkles.setDepth(15);
+
+      // Clean up sparkles
+      this.time.delayedCall(600, () => {
+        sparkles.destroy();
+      });
+
+      item.destroy();
       delete this.items[data.powerupId];
     }
 
@@ -386,6 +525,35 @@ class Level extends Phaser.Scene {
     item.setOrigin(0, 0);
     this.items[row + "." + col] = item;
     item.setDepth(2);
+
+    // Add glow effect to powerup
+    const glow = this.add.circle(col * TILE_SIZE + 20, row * TILE_SIZE + 20, 25, 0x00ffff, 0);
+    glow.setDepth(1);
+    glow.setBlendMode(Phaser.BlendModes.ADD);
+
+    // Pulsing glow animation
+    this.tweens.add({
+      targets: glow,
+      alpha: 0.4,
+      scale: 1.3,
+      duration: 800,
+      ease: 'Sine.easeInOut',
+      yoyo: true,
+      repeat: -1
+    });
+
+    // Floating animation
+    this.tweens.add({
+      targets: item,
+      y: item.y - 5,
+      duration: 1000,
+      ease: 'Sine.easeInOut',
+      yoyo: true,
+      repeat: -1
+    });
+
+    // Store glow reference for cleanup
+    item._glow = glow;
   }
 }
 

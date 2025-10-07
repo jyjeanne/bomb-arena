@@ -40,9 +40,12 @@ module.exports = {
   },
 
   fadeOut: function(callback, callbackContext, fadeDuration) {
-    // Get current active scene
-    const scene = window.game.scene.scenes.find(s => s.scene.isActive());
-    if (!scene) return;
+    // Get current active scene - check running scenes
+    const scene = window.game.scene.scenes.find(s => s.scene.isActive() || s.scene.settings.status === 6);
+    if (!scene) {
+      console.error('[FADER] No active scene found for fadeOut');
+      return;
+    }
 
     callbackContext = callbackContext || this;
 
@@ -56,8 +59,11 @@ module.exports = {
   },
 
   fadeIn: function(callback, callbackContext, fadeDuration) {
-    const scene = window.game.scene.scenes.find(s => s.scene.isActive());
-    if (!scene) return;
+    const scene = window.game.scene.scenes.find(s => s.scene.isActive() || s.scene.settings.status === 6);
+    if (!scene) {
+      console.error('[FADER] No active scene found for fadeIn');
+      return;
+    }
 
     callbackContext = callbackContext || this;
 

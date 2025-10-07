@@ -20,6 +20,15 @@ class Bomb extends Phaser.Physics.Arcade.Sprite {
 
     this.body.immovable = true;
 
+    // Add shadow under bomb
+    this.shadow = scene.add.ellipse(x, y + 10, 20, 8, 0x000000, 0.3);
+    this.shadow.setDepth(0);
+
+    // Add glow effect
+    this.glow = scene.add.circle(x, y, 16, 0xffaa00, 0);
+    this.glow.setDepth(5);
+    this.glow.setBlendMode(Phaser.BlendModes.ADD);
+
     // Phaser 3: tweens.add instead of game.add.tween
     this.sizeTween = scene.tweens.add({
       targets: this.scale,
@@ -30,20 +39,73 @@ class Bomb extends Phaser.Physics.Arcade.Sprite {
       yoyo: true,
       repeat: -1
     });
+
+    // Pulsing glow effect that intensifies over time
+    scene.tweens.add({
+      targets: this.glow,
+      alpha: 0.6,
+      scale: 1.5,
+      duration: 500,
+      ease: 'Sine.easeInOut',
+      yoyo: true,
+      repeat: -1
+    });
   }
 
   remove() {
     if (this.sizeTween) {
       this.sizeTween.stop();
     }
+    if (this.shadow) {
+      this.shadow.destroy();
+    }
+    if (this.glow) {
+      this.glow.destroy();
+    }
     this.destroy();
   }
 
   // Static method for rendering explosions
   static renderExplosion(scene, explosions) {
+    // Screen shake effect
+    scene.cameras.main.shake(300, 0.01);
+
     explosions.forEach(function(explosion) {
       const explosionSprite = scene.add.sprite(explosion.x, explosion.y, TEXTURES, getFrame(explosion.key, "01"));
       explosionSprite.setOrigin(0.5, 0.5);
+
+      // Add flash effect
+      const flash = scene.add.circle(explosion.x, explosion.y, 30, 0xffff00, 1);
+      flash.setDepth(15);
+      flash.setBlendMode(Phaser.BlendModes.ADD);
+      scene.tweens.add({
+        targets: flash,
+        alpha: 0,
+        scale: 3,
+        duration: 300,
+        ease: 'Cubic.easeOut',
+        onComplete: () => flash.destroy()
+      });
+
+      // Create particle emitter for fire/smoke effect
+      const particles = scene.add.particles(explosion.x, explosion.y, TEXTURES, {
+        frame: 'gamesprites/bomb/bomb_01.png',
+        speed: { min: 50, max: 150 },
+        angle: { min: 0, max: 360 },
+        scale: { start: 0.3, end: 0 },
+        alpha: { start: 0.8, end: 0 },
+        lifespan: 600,
+        blendMode: 'ADD',
+        tint: [0xff6600, 0xff3300, 0xffaa00],
+        quantity: 15,
+        duration: 100
+      });
+      particles.setDepth(12);
+
+      // Clean up particles after they're done
+      scene.time.delayedCall(800, () => {
+        particles.destroy();
+      });
 
       // Create animation if it doesn't exist
       const animKey = `explosion_${explosion.key}`;
